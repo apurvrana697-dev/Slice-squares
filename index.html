@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Slice System Final</title>
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #111;
+  font-family: Arial;
+}
+
+canvas {
+  display: block;
+  cursor: crosshair; /* ✅ cursor visible */
+}
+
+.ui {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+button {
+  margin: 5px;
+  padding: 10px;
+  background: #00eaff;
+  border: none;
+  cursor: pointer;
+}
+
+label {
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<div class="ui">
+  <button onclick="spawnTop()">Top</button>
+  <button onclick="spawnMiddle()">Middle</button>
+  <button onclick="spawnBottom()">Bottom</button>
+  <br><br>
+  <label>Speed: <span id="speedVal">1.0</span>x</label><br>
+  <input type="range" id="slider" min="0.1" max="2" step="0.1" value="1">
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// 🔥 TIME SCALE
+let timeScale = 1;
+
+const slider = document.getElementById("slider");
+const speedVal = document.getElementById("speedVal");
+
+slider.oninput = () => {
+  timeScale = parseFloat(slider.value);
+  speedVal.textContent = timeScale.toFixed(1);
+};
+
+// slicing state
+let isSlicing = false;
+let hasSliced = false;
+
+// trail
+let trail = [];
+const trailLength = 15;
+
+// objects
+let objects = [];
+
+// create
+function createObj(x,y,vy,gravity){
+  return {
+    x:x-40,
+    y:y-40,
+    w:80,
+    h:80,
+    vx:0,
+    vy:vy,
+    gravity:gravity
+  };
+}
+
+// spawn
+function spawnTop(){ objects=[createObj(canvas.width/2,-80,5,0.2)]; }
+function spawnMiddle(){ objects=[createObj(canvas.width/2,canvas.height/2,0,0)]; }
+function spawnBottom(){ objects=[createObj(canvas.width/2,canvas.height+80,-8,0.2)]; }
+
+// mouse
+let mouse={x:0,y:0};
+
+document.addEventListener("mousemove",e=>{
+  mouse.x=e.clientX;
+  mouse.y=e.clientY;
+
+  if(isSlicing){
+    trail.push({x:mouse.x,y:mouse.y});
+    if(trail.length>trailLength) trail.shift();
+  }
+});
+
+document.addEventListener("mousedown",e=>{
+  if(e.button===0){
+    isSlicing=true;
+    hasSliced=false;
+    trail=[];
+  }
+});
+
+document.addEventListener("mouseup",e=>{
+  if(e.button===0){
+    isSlicing=false;
+    trail=[];
+  }
+});
+
+// hit
+function hit(p1,p2,obj){
+  let cx=obj.x+obj.w/2;
+  let cy=obj.y+obj.h/2;
+
+  let dx=p2.x-p1.x;
+  let dy=p2.y-p1.y;
+
+  let len=dx*dx+dy*dy;
+  if(len===0) return false;
+
+  let t=((cx-p1.x)*dx+(cy-p1.y)*dy)/len;
+  t=Math.max(0,Math.min(1,t));
+
+  let px=p1.x+t*dx;
+  let py=p1.y+t*dy;
+
+  return Math.hypot(cx-px,cy-py) < obj.w/2;
+}
+
+// split
+function split(obj,p1,p2){
+
+  let dx=p2.x-p1.x;
+  let dy=p2.y-p1.y;
+
+  let absX=Math.abs(dx);
+  let absY=Math.abs(dy);
+
+  let newRects=[];
+
+  if(absX > absY){
+    let half=obj.h/2;
+
+    newRects.push(
+      {...obj,h:half,vy:-4},
+      {...obj,y:obj.y+half,h:half,vy:4}
+    );
+  } else {
+    let half=obj.w/2;
+
+    newRects.push(
+      {...obj,w:half,vx:-4},
+      {...obj,x:obj.x+half,w:half,vx:4}
+    );
+  }
+
+  objects = objects.filter(o=>o!==obj);
+  objects.push(...newRects);
+}
+
+// update
+function update(){
+
+  for(let obj of objects){
+    obj.x += obj.vx * timeScale;
+    obj.y += obj.vy * timeScale;
+    obj.vy += obj.gravity * timeScale;
+  }
+
+  if(isSlicing && !hasSliced && trail.length>1){
+
+    let p1=trail[0];
+    let p2=trail[trail.length-1];
+
+    for(let obj of objects){
+      if(hit(p1,p2,obj)){
+        split(obj,p1,p2);
+        hasSliced=true;
+        break;
+      }
+    }
+  }
+}
+
+// draw
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  for(let o of objects){
+    ctx.fillStyle="#00eaff";
+    ctx.fillRect(o.x,o.y,o.w,o.h);
+  }
+
+  if(isSlicing){
+    ctx.strokeStyle="white";
+    ctx.lineWidth=3;
+    ctx.beginPath();
+
+    for(let i=0;i<trail.length;i++){
+      let pt=trail[i];
+      if(i===0) ctx.moveTo(pt.x,pt.y);
+      else ctx.lineTo(pt.x,pt.y);
+    }
+
+    ctx.stroke();
+  }
+}
+
+// loop
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+spawnMiddle();
+</script>
+
+</body>
+</html>
